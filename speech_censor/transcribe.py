@@ -1,3 +1,4 @@
+# transcribe.py
 from typing import List
 from faster_whisper import WhisperModel
 
@@ -18,18 +19,6 @@ class Transcript:
     def __init__(self, segments: List['Segment'], duration: float):
         self.segments = segments
         self.duration = duration
-
-class CurseBase:
-    def __init__(self, curse_words: set[str], whitelist: set[str] = None):
-        self.curse_words = curse_words
-        self.whitelist = whitelist or set()
-
-    def is_curse(self, word: str) -> bool:
-        """Check if the word is a curse word, taking the whitelist into account."""
-        w_lower = word.lower()
-        if any(white in w_lower for white in self.whitelist):
-            return False
-        return any(c in w_lower for c in self.curse_words)
 
 def transcribe_file(file_path: str, model_size: str = "medium", language: str = None) -> Transcript:
     """
