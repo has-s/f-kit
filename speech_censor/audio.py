@@ -1,6 +1,7 @@
 import numpy as np
 from pathlib import Path
 from pydub import AudioSegment
+import pyloudnorm as pyln
 from typing import Union, List, Tuple
 from speech_censor.constants import SAMPLE_RATE, SAMPLE_WIDTH, CHANNELS
 
@@ -26,13 +27,32 @@ def extract_audio(input_file: str, output_file: str = None) -> str:
     run(cmd, check=True)
     return str(output_file)
 
-def make_beep(duration: float, freq: int = 1000) -> AudioSegment:
+def _normalize_loudness(waveform: np.ndarray, target_lufs: float, sr: int) -> np.ndarray:
     """
-    Generate a sine beep with sample-accurate duration.
+    Normalize waveform to target LUFS using ITU-R BS.1770 / EBU R128.
+    waveform: np.ndarray float32, mono or stereo in range [-1, 1]
+    sr: sample rate
+    """
+    meter = pyln.Meter(sr)  # BS.1770 meter
+    block_size_samples = int(0.4 * sr)  # 400 ms default block size
+
+    # если сигнал слишком короткий для метра, возвращаем без нормализации
+    if len(waveform) < block_size_samples:
+        return waveform
+
+    loudness = meter.integrated_loudness(waveform)
+    waveform_norm = pyln.normalize.loudness(waveform, loudness, target_lufs)
+    return waveform_norm
+
+
+def make_beep(duration: float, freq: int = 1000, target_lufs: float = -23.0) -> AudioSegment:
+    """
+    Generate a sine beep with sample-accurate duration, normalized to LUFS.
 
     Parameters:
         duration (float): Length of the beep in seconds.
         freq (int): Frequency of the sine wave in Hz (default 1000 Hz).
+        target_lufs (float): Target loudness in LUFS (default -23 LUFS, EBU R128 standard).
 
     Returns:
         AudioSegment: Stereo AudioSegment of the sine beep.
@@ -40,9 +60,14 @@ def make_beep(duration: float, freq: int = 1000) -> AudioSegment:
     num_samples = int(duration * SAMPLE_RATE)
     t = np.arange(num_samples) / SAMPLE_RATE
 
-    # Generate sine waveform with amplitude scaled for int16
-    waveform = 0.5 * np.sin(2 * np.pi * freq * t)
-    waveform_int16 = np.int16(waveform * 32767)
+    # Generate sine waveform float32 in [-1, 1]
+    waveform = 0.1 * np.sin(2 * np.pi * freq * t).astype(np.float32)
+
+    # Normalize loudness
+    waveform_norm = _normalize_loudness(waveform, target_lufs, SAMPLE_RATE)
+
+    # Scale to int16
+    waveform_int16 = np.int16(waveform_norm * 32767)
 
     # Create stereo by duplicating the waveform across channels
     stereo = np.column_stack([waveform_int16] * CHANNELS)
@@ -66,13 +91,9 @@ def make_mute(duration: float) -> AudioSegment:
     Returns:
         AudioSegment: Stereo AudioSegment of silence.
     """
-    # Calculate number of samples
     num_samples = int(duration * SAMPLE_RATE)
-
-    # Create a silent waveform (all zeros)
     silent = np.zeros((num_samples, CHANNELS), dtype=np.int16)
 
-    # Convert to AudioSegment
     return AudioSegment(
         silent.tobytes(),
         frame_rate=SAMPLE_RATE,
@@ -80,13 +101,13 @@ def make_mute(duration: float) -> AudioSegment:
         channels=CHANNELS
     )
 
-#################
 
 def censor_audio(
         input_wav: Union[str, AudioSegment],
         segments: List[Tuple[float, float]],
         mode: str = "beep",
-        beep_freq: int = 1000
+        beep_freq: int = 1000,
+        target_lufs: float = -23.0
 ) -> AudioSegment:
     """
     Replace segments in WAV or AudioSegment with beep or silence with sample-accurate duration.
@@ -95,6 +116,7 @@ def censor_audio(
     :param segments: list of (start_time, end_time) in seconds
     :param mode: "beep" or "mute"
     :param beep_freq: frequency for beep if mode="beep"
+    :param target_lufs: loudness of beep in LUFS (default -23.0, EBU R128)
     :return: AudioSegment with censored segments
     """
     # load audio if input is a path
@@ -105,7 +127,10 @@ def censor_audio(
 
     for start, end in segments:
         duration = end - start
-        replacement = make_beep(duration, beep_freq) if mode == "beep" else make_mute(duration)
+        replacement = (
+            make_beep(duration, beep_freq, target_lufs)
+            if mode == "beep" else make_mute(duration)
+        )
 
         start_ms = int(start * 1000)
         end_ms = int(end * 1000)

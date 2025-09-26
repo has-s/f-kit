@@ -3,3 +3,4 @@ numpy
 faster-whisper
 pydub
 pytest
+pyloudnorm
