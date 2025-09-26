@@ -1,139 +1,125 @@
-import subprocess
-import wave
-from pathlib import Path
 import numpy as np
+from pathlib import Path
+from pydub import AudioSegment
+from typing import Union, List, Tuple
+from speech_censor.constants import SAMPLE_RATE, SAMPLE_WIDTH, CHANNELS
 
 def extract_audio(input_file: str, output_file: str = None) -> str:
-    """
-    Extracts audio from any video or audio file supported by ffmpeg.
-    Converts to WAV for compatibility with Whisper if needed.
+    from subprocess import run
 
-    :param input_file: Path to input video/audio file.
-    :param output_file: Path to save extracted audio; if None, same folder + 'audio.wav'.
-    :return: Path to extracted audio file.
-    """
     input_path = Path(input_file)
     if output_file is None:
-        output_file = input_path.parent / "audio.wav"
+        # новый файл с `_extracted` в имени
+        output_file = input_path.with_name(input_path.stem + "_extracted.wav")
     else:
         output_file = Path(output_file)
 
     cmd = [
-        "ffmpeg",
-        "-y",            # overwrite if exists
+        "ffmpeg", "-y",
         "-i", str(input_path),
-        "-vn",           # no video
-        "-acodec", "pcm_s16le",  # WAV PCM
-        "-ar", "48000",          # sample rate
-        "-ac", "2",              # stereo
+        "-vn",
+        "-acodec", "pcm_s16le",
+        "-ar", "48000",
+        "-ac", "2",
         str(output_file)
     ]
-
-    subprocess.run(cmd, check=True)
+    run(cmd, check=True)
     return str(output_file)
 
-def make_beep(duration=0.2, freq=1000, sample_rate=48000):
+def make_beep(duration: float, freq: int = 1000) -> AudioSegment:
     """
-    Generate a beep sound as a numpy array (16-bit PCM), no file needed.
+    Generate a sine beep with sample-accurate duration.
 
-    :param duration: length of the beep in seconds
-    :param freq: frequency in Hz
-    :param sample_rate: samples per second
-    :return: numpy array of int16, sample rate
+    Parameters:
+        duration (float): Length of the beep in seconds.
+        freq (int): Frequency of the sine wave in Hz (default 1000 Hz).
+
+    Returns:
+        AudioSegment: Stereo AudioSegment of the sine beep.
     """
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
-    tone = 0.5 * np.sin(2 * np.pi * freq * t)
-    audio_data = np.int16(tone * 32767)
-    return audio_data, sample_rate
+    num_samples = int(duration * SAMPLE_RATE)
+    t = np.arange(num_samples) / SAMPLE_RATE
 
-def make_mute(duration=0.2, sample_rate=48000):
+    # Generate sine waveform with amplitude scaled for int16
+    waveform = 0.5 * np.sin(2 * np.pi * freq * t)
+    waveform_int16 = np.int16(waveform * 32767)
+
+    # Create stereo by duplicating the waveform across channels
+    stereo = np.column_stack([waveform_int16] * CHANNELS)
+
+    # Convert to AudioSegment
+    return AudioSegment(
+        stereo.tobytes(),
+        frame_rate=SAMPLE_RATE,
+        sample_width=SAMPLE_WIDTH,
+        channels=CHANNELS
+    )
+
+
+def make_mute(duration: float) -> AudioSegment:
     """
-    Generate a silent audio segment as a numpy array (16-bit PCM).
+    Generate a silent audio segment with sample-accurate duration.
 
-    :param duration: length of silence in seconds
-    :param sample_rate: samples per second
-    :return: numpy array of int16, sample rate
+    Parameters:
+        duration (float): Length of the silence in seconds.
+
+    Returns:
+        AudioSegment: Stereo AudioSegment of silence.
     """
-    n_samples = int(duration * sample_rate)
-    audio_data = np.zeros(n_samples, dtype=np.int16)
-    return audio_data, sample_rate
+    # Calculate number of samples
+    num_samples = int(duration * SAMPLE_RATE)
 
-def make_censor_track(
-    audio_length: float,
-    cursed_intervals: list[tuple[float, float]],
-    sample_rate: int = 48000,
-    method: str = "beep",
-    beep_freq: int = 1000,
-    beep_amplitude: float = 0.5
-) -> np.ndarray:
+    # Create a silent waveform (all zeros)
+    silent = np.zeros((num_samples, CHANNELS), dtype=np.int16)
+
+    # Convert to AudioSegment
+    return AudioSegment(
+        silent.tobytes(),
+        frame_rate=SAMPLE_RATE,
+        sample_width=SAMPLE_WIDTH,
+        channels=CHANNELS
+    )
+
+#################
+
+def censor_audio(
+        input_wav: Union[str, AudioSegment],
+        segments: List[Tuple[float, float]],
+        mode: str = "beep",
+        beep_freq: int = 1000
+) -> AudioSegment:
     """
-    Generate a full-length audio track for censoring.
+    Replace segments in WAV or AudioSegment with beep or silence with sample-accurate duration.
 
-    :param audio_length: total length of original audio in seconds
-    :param cursed_intervals: list of tuples (start_time, end_time)
-    :param sample_rate: samples per second
-    :param method: "mute" or "beep"
-    :param beep_freq: frequency of beep in Hz (if method="beep")
-    :param beep_amplitude: amplitude of beep (0..1)
-    :return: numpy array of int16 audio samples
+    :param input_wav: path to input WAV or AudioSegment
+    :param segments: list of (start_time, end_time) in seconds
+    :param mode: "beep" or "mute"
+    :param beep_freq: frequency for beep if mode="beep"
+    :return: AudioSegment with censored segments
     """
-    # Initialize track with zeros
-    total_samples = int(audio_length * sample_rate)
-    track = np.zeros(total_samples, dtype=np.float32)
+    # load audio if input is a path
+    if isinstance(input_wav, AudioSegment):
+        audio = input_wav
+    else:
+        audio = AudioSegment.from_wav(input_wav)
 
-    for start, end in cursed_intervals:
-        start_idx = int(start * sample_rate)
-        end_idx = int(end * sample_rate)
-        duration = end_idx - start_idx
-        if method == "beep":
-            t = np.linspace(0, (duration / sample_rate), duration, endpoint=False)
-            beep = beep_amplitude * np.sin(2 * np.pi * beep_freq * t)
-            track[start_idx:end_idx] = beep
-        else:  # mute
-            track[start_idx:end_idx] = 0.0
+    for start, end in segments:
+        duration = end - start
+        replacement = make_beep(duration, beep_freq) if mode == "beep" else make_mute(duration)
 
-    # Convert to int16
-    track_int16 = np.int16(track * 32767)
-    return track_int16
+        start_ms = int(start * 1000)
+        end_ms = int(end * 1000)
 
-def save_censor_track(track: np.ndarray, filename: str, sample_rate: int = 48000):
-    """Save generated track as WAV file."""
-    with wave.open(filename, "w") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(track.tobytes())
+        audio = audio[:start_ms] + replacement + audio[end_ms:]
 
-def overlay_censor_track(
-        original_audio_file: str,
-        censor_track: np.ndarray,
-        output_file: str,
-        sample_rate: int = 48000
-):
-    """
-    Overlay the generated censor track (beeps or silence) on the original audio.
+    # ensure final length matches original within 1 sample
+    original_len_samples = len(audio.get_array_of_samples()) // CHANNELS
+    expected_len_samples = int(audio.frame_count())
+    diff_samples = original_len_samples - expected_len_samples
+    if diff_samples != 0:
+        if diff_samples > 0:
+            audio = audio[:-diff_samples]
+        else:
+            audio += make_mute(-diff_samples / SAMPLE_RATE)
 
-    :param original_audio_file: path to original WAV
-    :param censor_track: numpy array of int16 samples
-    :param output_file: path to save final audio
-    :param sample_rate: sample rate of audio
-    """
-    import tempfile
-
-    # Save temporary censor track
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_path = tmp.name
-        save_censor_track(censor_track, tmp_path, sample_rate)
-
-    # Use ffmpeg to mix original audio with censor track
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", original_audio_file,
-        "-i", tmp_path,
-        "-filter_complex", "[0:a][1:a]amix=inputs=2:dropout_transition=0",
-        output_file
-    ]
-    subprocess.run(cmd, check=True)
-
-    #TODO: Fix audio overlay. Mute before beep.
+    return audio
