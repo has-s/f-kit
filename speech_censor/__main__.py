@@ -66,5 +66,3 @@ run([
     str(OUTPUT_VIDEO)
 ], check=True)
 print(f"Censored video saved to {OUTPUT_VIDEO}")
-
-#TODO: эхо.
