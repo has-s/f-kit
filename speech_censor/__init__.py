@@ -12,5 +12,5 @@ __all__ = [
     "censor_audio",
     "make_beep",
     "make_mute",
-    "play_sound"
+    "play_sound",
 ]
