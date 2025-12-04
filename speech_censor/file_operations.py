@@ -354,5 +354,3 @@ def reset_censorship(current_flags: dict) -> dict:
     for seg_idx, words_dict in current_flags.items():
         reset_flags[seg_idx] = {word_idx: False for word_idx in words_dict}
     return reset_flags
-
-
