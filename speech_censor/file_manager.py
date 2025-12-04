@@ -50,22 +50,22 @@ class FileManager:
         return self.temp_dir / f"{self.input_file.stem}_extracted.wav"
 
     @property
-    def transcript_json(self) -> Path:
+    def transcript_original_json(self) -> Path:
         """
-        Path to JSON file storing full transcript (segments + words + censored flags).
+        Path to JSON file storing the original transcript, including any existing censored flags.
 
-        :return: Path object for transcript JSON.
+        :return: Path object for the original transcript JSON.
         """
-        return self.temp_dir / f"{self.input_file.stem}_transcript.json"
+        return self.temp_dir / f"{self.input_file.stem}_transcript_original.json"
 
     @property
-    def cursed_segments_json(self) -> Path:
+    def transcript_edit_json(self) -> Path:
         """
-        Path to JSON file storing intervals of censored words.
+        Path to JSON file storing the editable censored flags (working version for edits).
 
-        :return: Path object for cursed segments JSON.
+        :return: Path object for the editable transcript JSON.
         """
-        return self.temp_dir / f"{self.input_file.stem}_cursed_segments.json"
+        return self.temp_dir / f"{self.input_file.stem}_transcript_edit.json"
 
     # ======== OUTPUT FILES ========
 
@@ -107,8 +107,8 @@ class FileManager:
         """
         return [
             self.extracted_wav,
-            self.transcript_json,
-            self.cursed_segments_json,
+            self.transcript_original_json,
+            self.transcript_edit_json,
         ]
 
     def clean_temp(self):
@@ -118,3 +118,43 @@ class FileManager:
         for f in self.list_temp_files():
             if f.exists():
                 f.unlink()
+
+# -----------------------------------------------------------------------------
+# Example: Full cycle of working with _censored.json flags
+# (for manual review, applying, or resetting flags)
+# -----------------------------------------------------------------------------
+#
+# from speech_censor.file_operations import (
+#     load_censored_flags,
+#     save_censored_flags,
+#     apply_censored_flags,
+#     reset_censorship
+# )
+#
+# # 1) Load existing censorship flags
+# censored_dict = load_censored_flags(fm)
+# print("Loaded censored flags:", censored_dict)
+#
+# # 2) Save new flags (e.g., after automated check or user review)
+# censored_dict = {}  # create a new dictionary
+# for i, seg in enumerate(segments):
+#     for j, word in enumerate(seg.words):
+#         if word.censored:
+#             censored_dict.setdefault(str(i), {})[str(j)] = True
+# save_censored_flags(fm, censored_dict)
+# print(f"Censored flags saved to {fm.transcript_censored_json}")
+#
+# # 3) Apply flags to the main transcript
+# apply_censored_flags(fm)
+# print("Censored flags applied to main transcript.")
+#
+# # 4) Reset all flags (e.g., after testing or review)
+# reset_censorship(fm)
+# print("All censorship flags reset.")
+#
+# -----------------------------------------------------------------------------
+# This mini-example demonstrates how to manually control censorship flags:
+# - save them separately
+# - review and apply them when needed
+# - reset them after testing
+# -----------------------------------------------------------------------------
