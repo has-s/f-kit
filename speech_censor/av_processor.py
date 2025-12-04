@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-format_bridge.py — universal media processing module.
+av_processor.py — universal media processing module.
 
 Handles extraction, conversion, and merging of audio/video using ffmpeg.
 Designed to integrate with transcription and censoring pipeline.
