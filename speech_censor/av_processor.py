@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-av_processor.py — universal media processing module.
-
-Handles extraction, conversion, and merging of audio/video using ffmpeg.
-Designed to integrate with transcription and censoring pipeline.
-"""
-
 from __future__ import annotations
 from pathlib import Path
 from subprocess import run, CalledProcessError
@@ -14,15 +6,43 @@ from typing import Optional
 
 class MediaProcessor:
     """
-    Universal processor for extracting, converting, and merging audio/video.
+    Universal processor for extracting, converting, and merging audio/video files.
 
-    Steps:
-        1. extract_to_wav() — extract raw audio from any file.
-        2. remux_audio() — export processed WAV into final format (OGG, MP3, etc.).
-        3. remux_video() — merge censored audio back into video, if applicable.
+    Steps
+    -----
+    1. extract_to_wav() : Extract raw audio from any input media into WAV.
+    2. remux_audio() : Convert processed WAV into a final audio format (OGG, MP3, WAV, etc.).
+    3. remux_video() : Merge censored audio back into the original video, if applicable.
+
+    Attributes
+    ----------
+    input_file : Path
+        Path to the original audio or video file.
+    temp_dir : Path
+        Directory for temporary/intermediate files.
+    output_dir : Path
+        Directory for final outputs.
+    base : str
+        Base filename stem of the input file.
+    extracted_wav : Path
+        Path to the extracted WAV file.
+    censored_wav : Path
+        Path to the temporary censored WAV file.
     """
 
     def __init__(self, input_file: str | Path, temp_dir: str | Path, output_dir: str | Path):
+        """
+        Initialize MediaProcessor with paths and ensure directories exist.
+
+        Parameters
+        ----------
+        input_file : str | Path
+            Path to input audio or video file.
+        temp_dir : str | Path
+            Directory for temporary/intermediate files.
+        output_dir : str | Path
+            Directory for final outputs.
+        """
         self.input_file = Path(input_file)
         self.temp_dir = Path(temp_dir)
         self.output_dir = Path(output_dir)
@@ -35,7 +55,19 @@ class MediaProcessor:
         self.censored_wav = self.temp_dir / f"{self.base}_censored.wav"
 
     def _run_ffmpeg(self, args: list[str]):
-        """Run ffmpeg with basic error handling."""
+        """
+        Run ffmpeg with the provided arguments and handle errors.
+
+        Parameters
+        ----------
+        args : list[str]
+            List of ffmpeg command-line arguments.
+
+        Raises
+        ------
+        RuntimeError
+            If ffmpeg execution fails.
+        """
         try:
             run(["ffmpeg", "-y", *args], check=True)
         except CalledProcessError as e:
@@ -43,13 +75,17 @@ class MediaProcessor:
 
     def extract_to_wav(self, target_sr: int = 48000) -> Path:
         """
-        Extracts an audio track from any input file into a 16-bit PCM WAV.
+        Extract audio from the input media into a 16-bit PCM WAV file.
 
-        Parameters:
-            target_sr (int): Target sample rate for output WAV.
+        Parameters
+        ----------
+        target_sr : int
+            Target sample rate for the output WAV (default 48000).
 
-        Returns:
-            Path: Path to the extracted WAV file.
+        Returns
+        -------
+        Path
+            Path to the extracted WAV file.
         """
         self._run_ffmpeg([
             "-i", str(self.input_file),
@@ -63,13 +99,17 @@ class MediaProcessor:
 
     def remux_audio(self, output_format: str = "ogg") -> Path:
         """
-        Converts censored WAV to the final audio format.
+        Convert censored WAV to the final audio format.
 
-        Parameters:
-            output_format (str): Format for the output (ogg, mp3, wav...).
+        Parameters
+        ----------
+        output_format : str
+            Target audio format (ogg, mp3, wav...). Default is "ogg".
 
-        Returns:
-            Path: Path to the exported audio file.
+        Returns
+        -------
+        Path
+            Path to the exported audio file.
         """
         codec = {
             "ogg": "libvorbis",
@@ -88,13 +128,17 @@ class MediaProcessor:
 
     def remux_video(self, censored_audio: Path) -> Optional[Path]:
         """
-        Merges censored audio with the original video (if video stream exists).
+        Merge censored audio into the original video, if a video stream exists.
 
-        Parameters:
-            censored_audio (Path): Path to censored audio file.
+        Parameters
+        ----------
+        censored_audio : Path
+            Path to the censored audio file.
 
-        Returns:
-            Optional[Path]: Path to the final MKV file, or None if input is audio-only.
+        Returns
+        -------
+        Optional[Path]
+            Path to the final MKV file, or None if input is audio-only.
         """
         probe = run([
             "ffprobe", "-v", "error",
@@ -120,7 +164,11 @@ class MediaProcessor:
         return out_video
 
     def clean_temp(self):
-        """Remove all temporary files created during processing."""
+        """
+        Remove all temporary files created during processing.
+
+        Temporary files include extracted WAV and censored WAV in temp_dir.
+        """
         for f in self.temp_dir.glob(f"{self.base}_*"):
             try:
                 f.unlink()
@@ -128,7 +176,11 @@ class MediaProcessor:
                 pass
 
     def reset_output(self):
-        """Remove all existing output files for this input."""
+        """
+        Remove all output files for this input in output_dir.
+
+        Output files include all formats of censored audio and video.
+        """
         for f in self.output_dir.glob(f"{self.base}_censored.*"):
             try:
                 f.unlink()

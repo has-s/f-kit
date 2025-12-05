@@ -218,8 +218,6 @@ def load_censored_flags(file: Path) -> dict:
     ----------
     file : Path
         Path to the JSON file with censored flags.
-    fm : FileManager
-        FileManager instance providing access to the original transcript.
 
     Returns
     -------

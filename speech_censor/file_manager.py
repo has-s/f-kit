@@ -5,8 +5,8 @@ class FileManager:
     """
     Handles paths and management of files involved in media processing (audio/video).
 
-    This class provides structured access to input files, temporary/intermediate files,
-    and output files. It ensures directories exist and provides convenient properties
+    Provides structured access to input files, temporary/intermediate files,
+    and output files, ensuring directories exist and providing convenient properties
     for commonly used file paths during processing, such as extracted audio, transcripts,
     censored audio, and subtitles.
 
@@ -20,7 +20,6 @@ class FileManager:
         Directory for final output files after processing.
     """
 
-    # Common audio and video extensions supported by FFmpeg
     AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac"}
     VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".wmv", ".mpg", ".mpeg"}
 
@@ -47,7 +46,6 @@ class FileManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     # ======== TEMP FILES ========
-
     @property
     def extracted_wav(self) -> Path:
         """
@@ -85,18 +83,8 @@ class FileManager:
         return self.temp_dir / f"{self.input_file.stem}_transcript_edit.json"
 
     # ======== OUTPUT FILES ========
-
     @property
     def censored_wav(self) -> Path:
-        """
-        Path to WAV file after applying audio censoring.
-
-        :return: Path object for censored WAV.
-        """
-        return self.output_dir / f"{self.input_file.stem}_censored.wav"
-
-    @property
-    def subtitles_srt(self) -> Path:
         """
         Path to the WAV file after applying audio censoring.
 
@@ -105,22 +93,33 @@ class FileManager:
         Path
             Full path to the censored WAV file in the output directory.
         """
-        return self.output_dir / f"{self.input_file.stem}_subtitles.srt"
+        return self.output_dir / f"{self.input_file.stem}_censored.wav"
 
     @property
-    def output_media(self) -> Path:
+    def subtitles_srt(self) -> Path:
         """
-        Path to the SRT file generated from the censored transcript.
+        Path to the SRT subtitles file generated from the censored transcript.
 
         Returns
         -------
         Path
             Full path to the subtitles SRT file in the output directory.
         """
+        return self.output_dir / f"{self.input_file.stem}_subtitles.srt"
+
+    @property
+    def output_media(self) -> Path:
+        """
+        Path to the final media file with censored audio, optionally merged with video.
+
+        Returns
+        -------
+        Path
+            Full path to the final output media file in the output directory.
+        """
         return self.output_dir / f"{self.input_file.stem}_censored{self.input_file.suffix}"
 
     # ======== UTILITY METHODS ========
-
     def list_temp_files(self) -> List[Path]:
         """
         List all temporary and intermediate files associated with this FileManager.
@@ -152,5 +151,40 @@ class FileManager:
         None
         """
         for f in self.list_temp_files():
+            if f.exists():
+                f.unlink()
+
+    def list_output_files(self) -> List[Path]:
+        """
+        List all output files generated for this input file.
+
+        Includes:
+            - Censored WAV
+            - Subtitles SRT
+            - Final merged media file
+
+        Returns
+        -------
+        List[Path]
+            List of Path objects representing all output files.
+        """
+        return [
+            self.censored_wav,
+            self.subtitles_srt,
+            self.output_media,
+        ]
+
+    def clean_output(self):
+        """
+        Remove all output files associated with this FileManager.
+
+        Deletes previously generated censored audio, subtitles, and final media files
+        to allow a fresh processing run.
+
+        Returns
+        -------
+        None
+        """
+        for f in self.list_output_files():
             if f.exists():
                 f.unlink()

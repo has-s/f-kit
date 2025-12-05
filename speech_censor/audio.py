@@ -5,16 +5,27 @@ import pyloudnorm as pyln
 from typing import Union, List, Tuple
 from speech_censor.constants import SAMPLE_RATE, SAMPLE_WIDTH, CHANNELS
 
+
 def extract_audio(input_file: str, output_file: str = None) -> str:
     """
-    Extract audio from video or audio file into WAV format.
+    Extract audio from video or audio file into 16-bit PCM WAV format.
 
-    Parameters:
-        input_file (str): path to input file
-        output_file (str, optional): path for extracted WAV. If None, adds "_extracted.wav"
+    Parameters
+    ----------
+    input_file : str
+        Path to input audio or video file.
+    output_file : str, optional
+        Path for the extracted WAV file. If None, adds "_extracted.wav" to input filename.
 
-    Returns:
-        str: path to the extracted WAV file
+    Returns
+    -------
+    str
+        Path to the extracted WAV file.
+
+    Raises
+    ------
+    CalledProcessError
+        If ffmpeg extraction fails.
     """
     from subprocess import run
 
@@ -36,17 +47,24 @@ def extract_audio(input_file: str, output_file: str = None) -> str:
     run(cmd, check=True)
     return str(output_file)
 
+
 def _normalize_loudness(waveform: np.ndarray, target_lufs: float, sr: int) -> np.ndarray:
     """
-    Normalize waveform to target LUFS using ITU-R BS.1770 / EBU R128.
+    Normalize waveform loudness to a target LUFS using ITU-R BS.1770 / EBU R128.
 
-    Parameters:
-        waveform (np.ndarray): float32 waveform, mono or stereo, values in [-1, 1]
-        target_lufs (float): desired loudness in LUFS
-        sr (int): sample rate in Hz
+    Parameters
+    ----------
+    waveform : np.ndarray
+        Float32 waveform, mono or stereo, values in [-1, 1].
+    target_lufs : float
+        Desired loudness in LUFS.
+    sr : int
+        Sample rate in Hz.
 
-    Returns:
-        np.ndarray: normalized waveform
+    Returns
+    -------
+    np.ndarray
+        Normalized waveform.
     """
     meter = pyln.Meter(sr)
     block_size_samples = int(0.4 * sr)
@@ -61,15 +79,21 @@ def _normalize_loudness(waveform: np.ndarray, target_lufs: float, sr: int) -> np
 
 def make_beep(duration: float, freq: int = 1000, target_lufs: float = -23.0) -> AudioSegment:
     """
-    Generate a sine beep of specified duration, frequency and loudness.
+    Generate a stereo sine beep of specified duration, frequency, and loudness.
 
-    Parameters:
-        duration (float): length of beep in seconds
-        freq (int): beep frequency in Hz (default 1000)
-        target_lufs (float): target loudness in LUFS (default -23.0)
+    Parameters
+    ----------
+    duration : float
+        Length of beep in seconds.
+    freq : int
+        Frequency in Hz (default 1000).
+    target_lufs : float
+        Target loudness in LUFS (default -23.0).
 
-    Returns:
-        AudioSegment: stereo beep
+    Returns
+    -------
+    AudioSegment
+        Stereo beep AudioSegment.
     """
     num_samples = int(duration * SAMPLE_RATE)
     t = np.arange(num_samples) / SAMPLE_RATE
@@ -87,13 +111,17 @@ def make_beep(duration: float, freq: int = 1000, target_lufs: float = -23.0) -> 
 
 def make_mute(duration: float) -> AudioSegment:
     """
-    Generate silent audio segment of given duration.
+    Generate a silent stereo AudioSegment of given duration.
 
-    Parameters:
-        duration (float): length of silence in seconds
+    Parameters
+    ----------
+    duration : float
+        Length of silence in seconds.
 
-    Returns:
-        AudioSegment: stereo silence
+    Returns
+    -------
+    AudioSegment
+        Silent stereo AudioSegment.
     """
     num_samples = int(duration * SAMPLE_RATE)
     silent = np.zeros((num_samples, CHANNELS), dtype=np.int16)
@@ -113,26 +141,31 @@ def censor_audio(
         target_lufs: float = -23.0
 ) -> AudioSegment:
     """
-    Replace segments in WAV or AudioSegment with beep or silence with sample-accurate duration,
-    ensuring output length exactly matches the original audio.
+    Replace specified segments in audio with beep or silence, maintaining exact original duration.
 
-    Parameters:
-        input_wav (Union[str, AudioSegment]): path to input WAV or AudioSegment
-        segments (List[Tuple[float, float]]): list of (start_time, end_time) in seconds
-        mode (str): "beep" or "mute"
-        beep_freq (int): frequency for beep if mode="beep"
-        target_lufs (float): loudness of beep in LUFS (default -23.0)
+    Parameters
+    ----------
+    input_wav : Union[str, AudioSegment]
+        Path to input WAV file or an AudioSegment object.
+    segments : List[Tuple[float, float]]
+        List of (start_time, end_time) tuples in seconds to censor.
+    mode : str
+        Replacement mode: "beep" or "mute" (default "beep").
+    beep_freq : int
+        Frequency of beep in Hz if mode="beep" (default 1000).
+    target_lufs : float
+        Loudness of beep in LUFS (default -23.0).
 
-    Returns:
-        AudioSegment: censored AudioSegment with the same duration as the input
+    Returns
+    -------
+    AudioSegment
+        Censored AudioSegment with identical duration to input.
     """
-    # load audio if input is a path
     if isinstance(input_wav, AudioSegment):
         audio = input_wav
     else:
         audio = AudioSegment.from_wav(input_wav)
 
-    # создаём копию, чтобы не менять исходное аудио
     censored_audio = AudioSegment.empty()
     cursor_ms = 0
 
@@ -140,7 +173,6 @@ def censor_audio(
         start_ms = int(start_sec * 1000)
         end_ms = int(end_sec * 1000)
 
-        # вставляем кусок оригинала до цензуры
         if start_ms > cursor_ms:
             censored_audio += audio[cursor_ms:start_ms]
 
@@ -151,11 +183,9 @@ def censor_audio(
         censored_audio += replacement
         cursor_ms = end_ms
 
-    # добавляем оставшийся кусок оригинала после последнего сегмента
     if cursor_ms < len(audio):
         censored_audio += audio[cursor_ms:]
 
-    # строго выравниваем длину с оригиналом
     if len(censored_audio) > len(audio):
         censored_audio = censored_audio[:len(audio)]
     elif len(censored_audio) < len(audio):
