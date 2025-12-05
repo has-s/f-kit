@@ -7,7 +7,7 @@ name = "speech-censor"
 version = "0.1.0"
 description = "A Python core for audio censorship using Whisper"
 authors = [
-    { name = "has-s" }
+    { name = "has-s", email = "" }
 ]
 license = { text = "MIT" }
 requires-python = ">=3.9"
@@ -21,3 +21,7 @@ pydub = ">=0.25.1,<1.0.0"
 
 [project.scripts]
 speech-censor = "speech_censor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/username/speech-censor"
+Repository = "https://github.com/username/speech-censor.git"
