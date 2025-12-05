@@ -1,88 +1,100 @@
-from typing import List
+from typing import List, Union
 from faster_whisper import WhisperModel
+import io
+
 
 class Word:
+    """
+    Represents a single word in a transcript with timing and censorship info.
+
+    Attributes
+    ----------
+    text : str
+        Recognized word text.
+    start_time : float
+        Start time of the word in seconds.
+    end_time : float
+        End time of the word in seconds.
+    censored : bool
+        Flag indicating whether the word has been censored. Defaults to False.
+    """
     def __init__(self, text: str, start_time: float, end_time: float, censored: bool = False):
         self.text = text
         self.start_time = start_time
         self.end_time = end_time
         self.censored = censored
 
+
 class Segment:
-    def __init__(self, words: List['Word']):
+    """
+    Represents a segment of audio containing a sequence of words.
+
+    Attributes
+    ----------
+    words : List[Word]
+        List of Word objects in the segment.
+    start_time : float
+        Start time of the segment (from first word). Defaults to 0 if no words.
+    end_time : float
+        End time of the segment (from last word). Defaults to 0 if no words.
+    """
+    def __init__(self, words: List[Word]):
         self.words = words
         self.start_time = words[0].start_time if words else 0.0
         self.end_time = words[-1].end_time if words else 0.0
 
+
 class Transcript:
-    def __init__(self, segments: List['Segment'], duration: float):
+    """
+    Represents the full transcript of an audio file.
+
+    Attributes
+    ----------
+    segments : List[Segment]
+        List of segments in the transcript.
+    duration : float
+        Total duration of the audio file in seconds.
+    """
+    def __init__(self, segments: List[Segment], duration: float):
         self.segments = segments
         self.duration = duration
 
-class CurseBase:
-    def __init__(self, curse_words: set[str], whitelist: set[str] = None):
-        self.curse_words = curse_words
-        self.whitelist = whitelist or set()
 
-    def is_curse(self, word: str) -> bool:
-        """Check if the word is a curse word, taking the whitelist into account."""
-        w_lower = word.lower()
-        if any(white in w_lower for white in self.whitelist):
-            return False
-        return any(c in w_lower for c in self.curse_words)
-
-def transcribe_file(file_path: str, model_size: str = "medium", language: str = None) -> Transcript:
+def transcribe_audio(source: Union[str, bytes], model_size: str = "medium", language: str = None) -> Transcript:
     """
-    Transcribe an audio or video file and return a Transcript object containing
-    segments and words with timestamps.
-    """
-    model = WhisperModel(model_size)
+    Transcribe audio from a file path or raw bytes and return a structured Transcript object.
 
-    segments_gen, info = model.transcribe(file_path, word_timestamps=True, language=language)
+    Parameters
+    ----------
+    source : str | bytes
+        Path to an audio/video file, or raw audio data as bytes.
+    model_size : str, optional
+        Size of the Whisper model to use ("tiny", "base", "medium", "large"). Defaults to "medium".
+    language : str, optional
+        Language code for transcription (e.g., "ru"). If None, automatic language detection is used.
 
-    segments_list: List[Segment] = []
+    Returns
+    -------
+    Transcript
+        Transcript object containing all segments and words with precise timestamps.
 
-    for seg_idx, segment in enumerate(segments_gen, 1):
-        words_list: List[Word] = []
-
-        if segment.words:
-            for w_idx, w in enumerate(segment.words, 1):
-                word_obj = Word(
-                    text=w.word,
-                    start_time=w.start,
-                    end_time=w.end
-                )
-                words_list.append(word_obj)
-
-            seg_obj = Segment(words=words_list)
-            segments_list.append(seg_obj)
-
-    transcript = Transcript(segments=segments_list, duration=info.duration)
-    return transcript
-
-def transcribe_stream(audio_data: bytes, model_size: str = "medium", language: str = None) -> Transcript:
-    """
-    Transcribe audio from memory (bytes) and return a Transcript object.
+    Notes
+    -----
+    - Words are represented as Word objects, each with `text`, `start_time`, `end_time`, and `censored` attributes.
+    - Segments are grouped sequences of words with `start_time` and `end_time` derived from the first and last words.
     """
     model = WhisperModel(model_size)
 
-    # faster-whisper поддерживает list[str] файлов или BytesIO
-    import io
-    audio_io = io.BytesIO(audio_data)
+    if isinstance(source, bytes):
+        source = io.BytesIO(source)
 
-    segments_gen, info = model.transcribe(audio_io, word_timestamps=True, language=language)
-
+    segments_gen, info = model.transcribe(source, word_timestamps=True, language=language)
     segments_list: List[Segment] = []
 
     for segment in segments_gen:
-        words_list: List[Word] = []
-        if segment.words:
-            for w in segment.words:
-                words_list.append(Word(
-                    text=w.word,
-                    start_time=w.start,
-                    end_time=w.end
-                ))
-            segments_list.append(Segment(words=words_list))
+        if not segment.words:
+            continue
+        words_list = [Word(w.word, w.start, w.end) for w in segment.words]
+        segments_list.append(Segment(words_list))
 
     return Transcript(segments=segments_list, duration=info.duration)

@@ -1,0 +1,8 @@
+setuptools
+numpy
+faster-whisper
+pydub
+pytest
+pyloudnorm
+rapidfuzz
+simpleaudio
