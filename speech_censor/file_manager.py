@@ -23,7 +23,7 @@ class FileManager:
     AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac"}
     VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".wmv", ".mpg", ".mpeg"}
 
-    def __init__(self, input_file: str, temp_dir: str = "../temp", output_dir: str = "../output"):
+    def __init__(self, input_file: str, temp_dir: str = "temp", output_dir: str = "output"):
         """
         Initialize a FileManager instance with paths for input, temporary, and output files.
 
@@ -34,13 +34,14 @@ class FileManager:
         input_file : str
             Path to the input audio or video file to be processed.
         temp_dir : str, optional
-            Path to the temporary directory for intermediate files (default: "../temp").
+            Name of the temporary directory relative to the input file's directory (default: "temp").
         output_dir : str, optional
-            Path to the output directory for final files (default: "../output").
+            Name of the output directory relative to the input file's directory (default: "output").
         """
         self.input_file = Path(input_file)
-        self.temp_dir = Path(temp_dir)
-        self.output_dir = Path(output_dir)
+        base_dir = self.input_file.parent  # Directory containing the input file
+        self.temp_dir = base_dir / temp_dir
+        self.output_dir = base_dir / output_dir
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
